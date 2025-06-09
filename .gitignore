@@ -6,7 +6,6 @@
 # User-specific files
 *.vscode
 *.json
-*.nav
 *.out
 *.trace
 *.o
