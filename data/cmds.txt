@@ -1,0 +1,21 @@
+在VS配置中设置命令参数，具体位置为配置-调试-命令参数，注意需要将配置栏由Debug设置为Release，因为配置项默认为Release.
+
+1. opensky
+.\rnx2rtkp -x 0 -k ..\conf\rover.conf -o ..\..\..\data\01-opensky\data01\rover.pos ..\..\..\data\01-opensky\data01\rover.obs ..\..\..\data\01-opensky\data01\rover.nav
+
+.\rnx2rtkp -x 0 -k ..\..\..\app\rnx2rtkp\conf\rover.conf -o ..\..\..\data\01-opensky\data02\rover.pos ..\..\..\data\01-opensky\data02\rover.obs ..\..\..\data\01-opensky\data02\rover.nav
+
+2. street
+.\rnx2rtkp -x 0 -k ..\..\..\app\rnx2rtkp\conf\rover.conf -o ..\..\..\data\02-street\data01\rover.pos ..\..\..\data\02-street\data01\rover.obs ..\..\..\data\02-street\data01\rover.nav
+
+.\rnx2rtkp -x 0 -k ..\..\..\app\rnx2rtkp\conf\rover.conf -o ..\..\..\data\02-street\data02\rover.pos ..\..\..\data\02-street\data02\rover.obs ..\..\..\data\02-street\data02\rover.nav
+
+3. downtown
+.\rnx2rtkp -x 0 -k ..\..\..\app\rnx2rtkp\conf\rover.conf -o ..\..\..\data\03-downtown\data01\rover.pos ..\..\..\data\03-downtown\data01\rover.obs ..\..\..\data\03-downtown\data01\rover.nav
+
+.\rnx2rtkp -x 0 -k ..\..\..\app\rnx2rtkp\conf\rover.conf -o ..\..\..\data\03-downtown\data02\rover.pos ..\..\..\data\03-downtown\data02\rover.obs ..\..\..\data\03-downtown\data02\rover.nav
+
+4. elevated
+.\rnx2rtkp -x 0 -k ..\..\..\app\rnx2rtkp\conf\rover.conf -o ..\..\..\data\04-elevated\data01\rover.pos ..\..\..\data\04-elevated\data01\rover.obs ..\..\..\data\04-elevated\data01\rover.nav
+
+.\rnx2rtkp -x 0 -k ..\..\..\app\rnx2rtkp\conf\rover.conf -o ..\..\..\data\04-elevated\data02\rover.pos ..\..\..\data\04-elevated\data02\rover.obs ..\..\..\data\04-elevated\data02\rover.nav
