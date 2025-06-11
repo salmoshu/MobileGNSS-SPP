@@ -3,7 +3,7 @@
 ## An EKF-based SPP system optimized for smartphone
 MobileGNSS-SPP是一个基于RTKLIB的改进SPP项目，其主要针对智能手机，该项目尤其针对某一款手机GNSS芯片（其型号暂时无从得知）进行了优化，不过其中的优化思路具备一定的通用性和启发性，因此也可以用于其他GNSS芯片。该项目并非完全关注算法原理和框架的先进性，而是关注工程化以及不同场景的算法鲁棒性，因此本项目可以视为从开源代码到工程化方案的路线图。
 
-## 算法优化项
+### 算法优化项
 主要关注的文件：
 - rtklib_src/pntpos.c
 
@@ -19,7 +19,25 @@ MobileGNSS-SPP是一个基于RTKLIB的改进SPP项目，其主要针对智能手
 启发项：
 - costmin代价最小化（仅后处理）；
 
-## 测试场景
+## 1. 程序编译与运行
+### 1.1 编译环境
+MobileGNSS-SPP项目使用CMake管理，理论上支持在Linux环境，MacOS环境和Windows环境下编译。不过建议优先选择Windows环境进行编译。
+
+KF-GINS编译成功后需要使用配置文件作为参数。程序调试时也需要添加命令行参数。
+
+### 1.2 在Windows内编译
+rnx2rtkp应用中包含一个msc的VS项目文件，可以直接使用VS打开，已经包含了基本的配置。
+
+不过需要将配置修改为Release模式，并设置编译方式为WIN32，不然会出现问题。
+
+程序最终运行前，需要在VS配置中设置命令参数，具体位置为配置-调试-命令参数，注意需要将配置栏也由Debug设置为Release，因为配置项默认为Release，输入如下的命令：
+
+```shell
+.\rnx2rtkp -x 0 -k ..\conf\rover.conf -o ..\..\..\data\01-opensky\data01\rover.pos ..\..\..\data\01-opensky\data01\rover.obs ..\..\..\data\01-opensky\data01\rover.nav
+```
+
+## 2. 使用MobileGNSS-SPP
+### 2.1 测试数据
 测试场景分类：  
 
 | 测试场景 | 场景描述                    |

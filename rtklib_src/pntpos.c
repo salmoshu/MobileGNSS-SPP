@@ -674,11 +674,7 @@ static int RobustFilter(const double *H, const double *v, int nx, int nc, int nd
             weight = 1.0 / sig;
             resid = fabs(v[i] - dot(H + i * nx, dx, nx));
             if (i >= nc) {
-                if (iter == 0) {
-                    weight = 1.0 / sig;
-                } else {
-                    weight = RobustWeight(resid, sig, ROBUST_HUBER, ROBUST_VEL);
-                }
+                weight = RobustWeight(resid, sig, ROBUST_HUBER, ROBUST_VEL);
             } else {
                 weight = RobustWeight(resid, sig, ROBUST_HUBER, ROBUST_POS);
             }
@@ -1407,6 +1403,10 @@ static int EstposFilter(const obsd_t *obs, int n, const double *rs, const double
                     H_new[k + j * (NX_F-3)] = H[k + j * NX_F];
                 }
             }
+        }
+
+        for (j = 0; j < nc; j++) {
+            // v[j] -= 2.5 * sqrt(var[j]);
         }
 
         RobustFilter(H_new, v, NX_F-3, nc, nd, NULL, var);
