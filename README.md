@@ -23,7 +23,7 @@ MobileGNSS-SPP是一个基于RTKLIB的改进SPP项目，其主要针对智能手
 ### 1.1 编译环境
 MobileGNSS-SPP项目使用CMake管理，理论上支持在Linux环境，MacOS环境和Windows环境下编译。不过建议优先选择Windows环境进行编译。
 
-KF-GINS编译成功后需要使用配置文件作为参数。程序调试时也需要添加命令行参数。
+MobileGNSS-SPP编译成功后需要使用配置文件作为参数。程序调试时也需要添加命令行参数。
 
 ### 1.2 在Windows内编译
 rnx2rtkp应用中包含一个msc的VS项目文件，可以直接使用VS打开，已经包含了基本的配置。
