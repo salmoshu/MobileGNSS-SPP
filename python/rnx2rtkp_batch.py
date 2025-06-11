@@ -129,4 +129,4 @@ if __name__ == "__main__":
         time.sleep(1)
     end_time = time.time()
     DeleteFilesWithName(output_path, "_events.pos")
-    print('Batch processing completed in {0}s'.format(end_time-start_time))
+    print('Batch processing completed in {0:.2f}s'.format(end_time-start_time))

@@ -577,6 +577,64 @@ static int valsol(const double *azel, const int *vsat, int n,
     return 1;
 }
 
+static double RobustWeightLsq(double resid, double sig, int kernel, int mode)
+{
+    resid = fabs(resid);
+    if (sig == 0) sig = 1.0;
+
+    switch (kernel) {
+        case ROBUST_HUBER: { /* Huber model */
+            double k = 1.345;
+            if (mode == ROBUST_POS || mode == ROBUST_NONE) {
+                k = 1.345;
+            } else {
+                k = 5.0;
+            }
+            double z = resid / sig;
+
+            if (z < k) {
+                return 1.0 / sig;
+            } else if ((mode==ROBUST_POS&&resid>=100) || (mode==ROBUST_VEL&&resid>=20)) {
+                return 0.0001 / sig;
+            } else {
+                return k / resid;
+            }
+        }
+        case ROBUST_IGG3: { /* IGG3 model */
+            double k1 = 1.5;
+            double k2 = 4.0;
+            if (mode == ROBUST_POS || mode == ROBUST_NONE) {
+                k1 = 1.5;
+                k2 = 4.0;
+            } else {
+                // case1: same as huber
+                k1 = 5.0;
+                k2 = 5.0;
+
+                // case2
+                // k1 = 1.3;
+                // k2 = 10.0;
+            }
+            double z = resid / sig;
+
+            if (z < k1) {
+                return 1.0 / sig; /* 正常观测，满权重 */
+            } else if (z < k2) {
+                /* 过渡区间，权重线性下降 */
+                return (k2 - z) / (k2 - k1) / sig;
+            }
+            else if ((mode == ROBUST_POS && resid >= 100) || (mode == ROBUST_VEL && resid >= 20)) {
+                return 0.0001 / sig; /* 异常观测，极小权重 */
+            } else {
+                return k1 / resid; /* 异常区间，权重随残差反比下降 */
+            }
+        }
+        default: { /* equal */
+            return 1.0;
+        }
+    }
+}
+
 static double RobustWeight(double resid, double sig, int kernel, int mode)
 {
     resid = fabs(resid);
@@ -589,7 +647,7 @@ static double RobustWeight(double resid, double sig, int kernel, int mode)
 
             if (z < k) {
                 return 1.0 / sig;
-            } else if ((mode==ROBUST_POS&&resid>=30) || (mode==ROBUST_VEL&&resid>=2)) {
+            } else if ((mode==ROBUST_POS&&resid>=100) || (mode==ROBUST_VEL&&resid>=2)) {
                 return 0.0001 / sig;
             } else {
                 return k / resid;
@@ -604,8 +662,7 @@ static double RobustWeight(double resid, double sig, int kernel, int mode)
 /*
 要点：
 1. 迭代流程。迭代最小二乘，先计算权，再更新H和v
-2. x与v差异化处理。位置第一个历元需要除以残差本身，而速度则不需要，可能是速度对初始残差很敏感（会导致异常）
-3. dx初值。初始的时候需要将dx赋值为0，不然结果可能会出现毛刺，本质是增加了迭代次数，以及位置首次迭代会除以残差本身
+2. dx初值。初始的时候需要将dx赋值为0，不然结果可能会出现毛刺，本质是增加了迭代次数，以及位置首次迭代会除以残差本身
 注意：
 mode为0则为位置抗差，mode为1则为速度抗差
 */
@@ -626,10 +683,11 @@ static int RobustLsq(const double *H, const double *v, int nx, int nv, double *d
             sig = sqrt(var[i]);
             weight = 1.0 / sig;
             resid = fabs(v[i] - dot(H + i * nx, dx, nx));
-            if (mode == ROBUST_VEL && iter == 0) {
-                weight = 1.0 / sig;
+            if (mode == ROBUST_VEL) {
+                weight = RobustWeightLsq(resid, sig, ROBUST_HUBER, ROBUST_VEL);
+                // if (iter == 0) weight = 1.0 / sig;
             } else {
-                weight = RobustWeight(resid, sig, ROBUST_HUBER, ROBUST_NONE);
+                weight = RobustWeightLsq(resid, sig, ROBUST_HUBER, ROBUST_POS);
             }
             W[i + i * nv] = SQR(weight);
             v_new[i] = v[i] * weight;
@@ -863,11 +921,14 @@ static int raim_fde(const obsd_t *obs, int n, const double *rs,
 /* range rate residuals ------------------------------------------------------*/
 static int resdop(const obsd_t *obs, int n, const double *rs, const double *dts,
                   const nav_t *nav, const double *rr, const double *x,
-                  const double *azel, const int *vsat, double err, double *v,
-                  double *H, double *var)
+                  const double *azel, const int *vsat, const ssat_t *ssat, 
+                  const prcopt_t *opt, double err, double *v, double *H, double *var)
 {
     double freq,rate,pos[3],E[9],a[3],e[3],vs[3],cosel,sig;
-    int i,j,nv=0;
+    int i,j,nv=0,sys;
+    prcopt_t opt_ = {0};
+
+    memcpy(&opt_, opt, sizeof(prcopt_t));
     
     trace(3,"resdop  : n=%d\n",n);
     
@@ -877,7 +938,7 @@ static int resdop(const obsd_t *obs, int n, const double *rs, const double *dts,
         
         freq=sat2freq(obs[i].sat,obs[i].code[0],nav);
         
-        if (obs[i].D[0]==0.0||freq==0.0||!vsat[i]||norm(rs+3+i*6,3)<=0.0) {
+        if (!(sys = satsys(obs[i].sat, NULL))||obs[i].D[0]==0.0||freq==0.0||!vsat[i]||norm(rs+3+i*6,3)<=0.0) {
             continue;
         }
         /* LOS (line-of-sight) vector in ECEF */
@@ -896,9 +957,14 @@ static int resdop(const obsd_t *obs, int n, const double *rs, const double *dts,
                                      rs[3+i*6]*rr[1]-rs[  i*6]*x[1]);
         
         /* Std of range rate error (m/s) */
-        sig=(err<=0.0)?1.0:err*CLIGHT/freq;
+        // sig=(err<=0.0)?1.0:err*CLIGHT/freq;
+        // var[nv]=SQR(sig);
 
-        var[nv]=SQR(sig);
+        opt_.eratio[0] = 30.0; // doppler/phase error ratio
+        if (ssat)
+            var[nv]=varerr(&opt_,&ssat[obs[i].sat-1],&obs[i],azel[1+i*2],sys);
+        else
+            var[nv]=varerr(&opt_,NULL,&obs[i],azel[1+i*2],sys);
         
         /* range rate residual (m/s) */
         v[nv]=(-obs[i].D[0]*CLIGHT/freq-(rate+x[3]-CLIGHT*dts[1+i*2]));
@@ -913,12 +979,13 @@ static int resdop(const obsd_t *obs, int n, const double *rs, const double *dts,
 }
 /* estimate receiver velocity ------------------------------------------------*/
 static void estvel(const obsd_t *obs, int n, const double *rs, const double *dts,
-                   const nav_t *nav, const prcopt_t *opt, sol_t *sol,
-                   const double *azel, const int *vsat)
+                   const nav_t *nav, const prcopt_t *opt, const ssat_t *ssat,
+                   sol_t *sol, const double *azel, const int *vsat)
+
 {
-    double x[4]={0},dx[4]={0},Q[16],*v,*H,*var;
+    double x[4]={0},dx[4]={0},Q[16],*v,*H,*var,sig;
     double err=opt->err[4]; /* Doppler error (Hz) */
-    int i,j,nv;
+    int i,j,k,nv;
     
     v=mat(n,1); H=mat(4,n); var=mat(n,1);
 
@@ -927,9 +994,16 @@ static void estvel(const obsd_t *obs, int n, const double *rs, const double *dts
     for (i=0;i<MAXITR;i++) {
         
         /* range rate residuals (m/s) */
-        if ((nv=resdop(obs,n,rs,dts,nav,sol->rr,x,azel,vsat,err,v,H,var))<4) {
+        if ((nv=resdop(obs,n,rs,dts,nav,sol->rr,x,azel,vsat,ssat,opt,err,v,H,var))<4) {
             break;
         }
+
+        // for (j=0;j<nv;j++) {
+        //     sig=sqrt(var[j]);
+        //     v[j]/=sig;
+        //     for (k=0;k<4;k++) H[k+j*4]/=sig;
+        // }
+
         /* least square estimation */
         // if (lsq(H,v,4,nv,dx,Q)) break;
         if (RobustLsq(H, v, 4, nv, dx, Q, var, ROBUST_VEL)) break;
@@ -1011,7 +1085,7 @@ extern int pntpos(const obsd_t *obs, int n, const nav_t *nav,
     }
     /* estimate receiver velocity with Doppler */
     if (stat) {
-        estvel(obs,n,rs,dts,nav,&opt_,sol,azel_,vsat);
+        estvel(obs,n,rs,dts,nav,&opt_,ssat,sol,azel_,vsat);
     }
     if (azel) {
         for (i=0;i<n*2;i++) azel[i]=azel_[i];
@@ -1198,7 +1272,7 @@ static void InsertVelAcc(const int nv, double *H)
     free(H_copy);
 }
 
-/* range rate residuals of mul-freq */
+/* range rate residuals */
 static int ResdopFilter(const obsd_t *obs, const int n, const double *rs, const double *dts,
                         const nav_t *nav, const double *rr, const prcopt_t *opt, 
                         const ssat_t *ssat, const double *x, const double *azel, 
@@ -1242,9 +1316,11 @@ static int ResdopFilter(const obsd_t *obs, const int n, const double *rs, const 
                                               rs[i * 6] * x[4]);
 
         /* range rate residual (m/s). */
-        sig = (err <= 0.0) ? 1.0 : err * CLIGHT / freq;
         v[nv] = (-obs[i].D[0] * CLIGHT / freq - (rate + x[NX_F-1] - CLIGHT * dts[1 + i * 2]));
-        var[nv] = SQR(sig);
+        
+        /* origin model */
+        // sig = (err <= 0.0) ? 1.0 : err * CLIGHT / freq;
+        // var[nv] = SQR(sig);
 
         /* SNR model #1 */
         opt_.eratio[0] = 30.0; // doppler/phase error ratio

@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import pymap3d as pm
 import pymap3d.vincenty as pmv
+import matplotlib.pyplot as plt
 
 import os
 import sys
@@ -14,7 +15,6 @@ sys.path.append(rtkpkg_dir)
 cfgfile = os.path.join(rtkpkg_dir, 'config_spp.py')
 shutil.copyfile(cfgfile, '__ppk_config.py')
 
-import __ppk_config as cfg
 import rtkcmn as gn
 
 GPS_EPOCH = datetime(1970, 1, 1)  # GPS 时代的起始时间 (1970-01-01 00:00:00 UTC)
@@ -335,9 +335,25 @@ def calc_score(llh, llh_gt):
 
     return score, [score_50, score_95, score_100]
 
+def utc2epochs(utc):
+    """
+    Convert Unix timestamp (ms) to GPST string and then to epoch.
+    """
+    ep_str_arr = []
+    # 遍历输入的utc数组
+    for single_utc in utc:
+        t = gn.gtime_t()
+        t.time = single_utc // 1000
+        t.sec = (single_utc % 1000) / 1000.0
+        gpst = gn.utc2gpst(t)
+        ep = gn.time2epoch(gpst) # ep = [y, m, d, h, min, sec]
+        ep_str = f"{ep[3]:d}:{ep[4]:d}.{ep[5]:.1f}"
+        ep_str_arr.append(ep_str)
+    return np.array(ep_str_arr)
+
 if __name__ == '__main__':
-    path = r'../data/01-opensky/data01'
-    # path = r'../data/02-street/data01'
+    # path = r'../data/01-opensky/data01'
+    path = r'../data/02-street/data01'
     # path = r'../data/03-downtown/data01'
     # path = r'../data/04-elevated/data01'
 
@@ -367,3 +383,36 @@ if __name__ == '__main__':
     print("\033[1;32m" + f"{scene}, {group} [nepoch = {len(utc)}]: (CEP50+CEP95)/2, CEP50, CEP95, CEP100" + "\033[0m")
     print(f'Score Baseline   {score_bl:.2f} ({scores_bl[0]:.2f} {scores_bl[1]:.2f} {scores_bl[2]:.2f}) [m]')
     print(f'Score EKF       {score_ekf:.2f} ({scores_ekf[0]:.2f} {scores_ekf[1]:.2f} {scores_ekf[2]:.2f}) [m]')
+
+    epochs_strs = utc2epochs(utc)
+    # epochs_strs = range(len(utc))
+
+    # Plot distance error
+    plt.figure()
+    plt.title('Distance error')
+    plt.ylabel('Distance error [m]')
+    plt.plot(epochs_strs, vd_bl, label=f'Baseline, Score: {score_bl:.2f} ({scores_bl[0]:.2f},{scores_bl[1]:.2f}) m')
+    plt.plot(epochs_strs, vd_ekf, label=f'EKF, Score: {score_ekf:.2f} ({scores_ekf[0]:.2f},{scores_ekf[1]:.2f}) m')
+    plt.legend()
+    plt.xlabel('Time [hh:mm:ss]')
+    plt.xticks(rotation=90, fontsize=6)
+    # 自动调整刻度间隔，避免过密
+    locator = plt.MaxNLocator(nbins=20)  # 控制最大刻度数量
+    plt.gca().xaxis.set_major_locator(locator)
+    plt.grid()
+    plt.ylim([0, 20])
+
+    # Compute velocity error
+    speed_wls = np.linalg.norm(v_wls[:, :3], axis=1)
+    speed_gt = aligned_gt_df['SpeedMps'].to_numpy()
+    speed_rmse = np.sqrt(np.sum((speed_wls-speed_gt)**2)/len(speed_gt))
+
+    # Plot velocity error
+    plt.figure()
+    plt.title('Speed error')
+    plt.ylabel('Speed Error [m/s]')
+    plt.plot(speed_wls - speed_gt, label=f'Speed RMSE: {speed_rmse:.2f} m')
+    plt.legend()
+    plt.grid()
+
+    plt.show()
