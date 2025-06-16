@@ -21,7 +21,9 @@ The project introduces several key enhancements to the RTKLIB codebase, primaril
 - **SNR-Weighted Model**: Applies Signal-to-Noise Ratio (SNR) weighting to both pseudorange and Doppler measurements, improving signal quality assessment.
 - **Multipath Error Compensation**: Leverages empirical chipset testing to compensate for pseudorange residuals caused by multipath effects, enhancing performance in complex environments.
 - **Adaptive Q Matrix**: Dynamically adjusts the velocity covariance in the Extended Kalman Filter (EKF) using the velocity difference between EKF predictions and Robust Weighted Least Squares (RWLS) estimates.
-- **Cost Minimization via Quadratic Programming**: Implements a post-processing optimization technique based on quadratic programming to minimize positioning errors.
+- **Cost Minimization via Quadratic Programming**: Implements a post-processing optimization technique based on quadratic programming to minimize positioning errors. This part is implemented using Python and is only for post-processing.
+
+For more technical details, please refer to [the online documentation](https://salmoshu.github.io/algorithm/MobileGNSS-SPP/).
 
 ## 1. Building and Running MobileGNSS-SPP
 
