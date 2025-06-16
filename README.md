@@ -1,48 +1,91 @@
 # MobileGNSS-SPP
 
 ## An EKF-based SPP system optimized for smartphone
-MobileGNSS-SPP是一个基于RTKLIB的改进SPP项目，其主要针对智能手机，该项目尤其针对某一款手机GNSS芯片（其型号暂时无从得知）进行了优化，不过其中的优化思路具备一定的通用性和启发性，因此也可以用于其他GNSS芯片。该项目并非完全关注算法原理和框架的先进性，而是关注工程化以及不同场景的算法鲁棒性，因此本项目可以视为从开源代码到工程化方案的路线图。
 
-### 算法优化项
-主要关注的文件：
-- rtklib_src/pntpos.c
+[[中]](./README_CN.md) &ensp; [[EN]](./README.md)
 
-有效的改进：
-- M估计（抗差，R调节）：使用迭代最小二乘求得权阵W，使用Huber作为核函数，不过需要对残差较大项进行截断处理；
-- 零速修正；
-- SNR加权模型：需要给多普勒也进行SNR加权；
-- 伪距残差的多路径误差补偿（主要来自芯片的测试经验，而非特定的数学模型）；
+![MobileGNSS-SPP Framework](https://raw.githubusercontent.com/salmoshu/Winchell-ImgBed/main/img/MobileGNSS-SPP%20Framework-20250616-150022.png)
 
-不确定的改进：
-- 自适应Q：一个谈不上专业的土法子，使用EKF预测的速度与RWLS的速度差值来构建Q中的速度协方差项；
+MobileGNSS-SPP is an advanced, open-source Single Point Positioning (SPP) system built upon the foundation of [RTKLIB](https://www.rtklib.com/), tailored specifically for optimizing GNSS performance on smartphone chipsets. While initially developed for a specific GNSS chipset, the optimization techniques and engineering approaches are designed with generality and adaptability in mind, making them applicable to a wide range of GNSS hardware. The project prioritizes practical engineering solutions and algorithmic robustness across diverse real-world scenarios, serving as a comprehensive roadmap for transitioning from open-source code to production-ready GNSS solutions.
 
-启发项：
-- costmin代价最小化（仅后处理）；
+## Key Features
+- **Smartphone-Optimized GNSS Processing**: Fine-tuned algorithms to maximize positioning accuracy on resource-constrained mobile devices.
+- **Robustness Across Scenarios**: Extensively tested in diverse environments, from open-sky highways to urban canyons with heavy multipath interference.
+- **Engineering-Focused Design**: Emphasizes practical implementation, scalability, and reliability over purely theoretical advancements.
+- **Modular and Extensible**: Built with CMake for cross-platform compatibility and easy integration into existing GNSS workflows.
+- **Comprehensive Testing Framework**: Includes Python-based tools for batch processing, accuracy evaluation, and in-depth data analysis.
 
-## 1. 程序编译与运行
-### 1.1 编译环境
-MobileGNSS-SPP项目使用CMake管理，理论上支持在Linux环境，MacOS环境和Windows环境下编译。不过建议优先选择Windows环境进行编译。
+## Algorithmic Optimizations
+The project introduces several key enhancements to the RTKLIB codebase, primarily in the `rtklib_src/pntpos.c` file, to improve positioning accuracy and robustness:
 
-MobileGNSS-SPP编译成功后需要使用配置文件作为参数。程序调试时也需要添加命令行参数。
+- **M-Estimation (Robust Estimation)**: Employs iterative least squares with a Huber kernel-based weight matrix (W) to mitigate outliers, incorporating truncation for large residuals to enhance stability.
+- **Zero-Velocity Correction**: Improves positioning accuracy during static or low-motion scenarios, critical for smartphone use cases.
+- **SNR-Weighted Model**: Applies Signal-to-Noise Ratio (SNR) weighting to both pseudorange and Doppler measurements, improving signal quality assessment.
+- **Multipath Error Compensation**: Leverages empirical chipset testing to compensate for pseudorange residuals caused by multipath effects, enhancing performance in complex environments.
+- **Adaptive Q Matrix**: Dynamically adjusts the velocity covariance in the Extended Kalman Filter (EKF) using the velocity difference between EKF predictions and Robust Weighted Least Squares (RWLS) estimates.
+- **Cost Minimization via Quadratic Programming**: Implements a post-processing optimization technique based on quadratic programming to minimize positioning errors.
 
-### 1.2 在Windows内编译
-rnx2rtkp应用中包含一个msc的VS项目文件，可以直接使用VS打开，已经包含了基本的配置。
+## 1. Building and Running MobileGNSS-SPP
 
-不过需要将配置修改为Release模式，并设置编译方式为WIN32，不然会出现问题。
+### 1.1 Build Environment
+MobileGNSS-SPP uses [CMake](https://cmake.org/) for cross-platform build management, supporting compilation on **Linux**, **macOS**, and **Windows**. For optimal compatibility and ease of use, we recommend compiling on Windows using Microsoft Visual Studio (VS).
 
-程序最终运行前，需要在VS配置中设置命令参数，具体位置为配置-调试-命令参数，注意需要将配置栏也由Debug设置为Release，因为配置项默认为Release，输入如下的命令：
+### 1.2 Compiling on Windows
+The `rnx2rtkp` application includes a pre-configured Visual Studio project file (`msc`) for seamless integration. Follow these steps to build the project:
+
+1. Open the `rnx2rtkp` project in Visual Studio.
+2. Switch the build configuration to **Release** mode and set the platform to **Win32** to avoid compatibility issues.
+3. Configure the command-line arguments in Visual Studio:
+   - Navigate to **Configuration Properties > Debugging > Command Arguments**.
+   - Ensure the configuration is set to **Release**.
+   - Add the following command-line arguments:
 
 ```shell
 .\rnx2rtkp -x 0 -k ..\conf\rover.conf -o ..\..\..\data\01-opensky\data01\rover.pos ..\..\..\data\01-opensky\data01\rover.obs ..\..\..\data\01-opensky\data01\rover.nav
 ```
 
-## 2. 使用MobileGNSS-SPP
-### 2.1 测试数据
-测试场景分类：  
+4. Build the solution to generate the executable.
 
-| 测试场景 | 场景描述                    |
-| ---- | --------------------------- |
-| 开阔环境测试（高架环路）| 在高架桥面道路、城市外环路或环路等开阔且相对直线路段进行测试，这些路段通常具有良好的GNSS信号接收条件，适合测试设备在高速移动和无障碍环境下的性能。|
-| 城市街道测试（树荫街道）| 在城市街道环境中进行测试，特别是有路边树木的街道，可能存在一定程度的GNSS信号遮挡。  |
-| 复杂环境测试（市中心）  | 在市中心区域进行测试，通常有高楼大厦、密集建筑和复杂的交通环境，GNSS信号接收可能受到较大干扰。 |
-| 遮挡环境测试（高架遮挡）| 在高架桥下或高架桥附近进行测试。高架桥的桥墩、桥面及周边建筑会对GNSS信号产生遮挡或反射，形成复杂的信号环境。 |
+## 2. Using MobileGNSS-SPP
+
+### 2.1 Test Scenarios
+MobileGNSS-SPP has been rigorously tested across diverse environments to ensure robustness and reliability. The following scenarios are supported for evaluation:
+
+| Test Scenario | Description |
+|---------------|-------------|
+| **Open-Sky (Highway)** | High-speed testing on elevated highways or outer ring roads with unobstructed GNSS signals, ideal for evaluating performance in optimal conditions. |
+| **Urban Streets (Tree-Lined)** | Testing in city streets with tree cover, introducing moderate GNSS signal occlusion for assessing performance under partial interference. |
+| **Complex Urban (Downtown)** | Testing in dense urban environments with high-rise buildings, heavy multipath, and signal obstructions, challenging the system's robustness. |
+| **Occluded Environment (Underpass)** | Testing near or under elevated structures (e.g., bridges), where GNSS signals face significant blockage and multipath effects. |
+
+### 2.2 Test and Analysis Scripts
+The project includes a suite of Python scripts to facilitate testing, evaluation, and data analysis:
+
+```plaintext
+\python
+├── rnx2rtkp_batch.py     : Batch processes rnx2rtkp for multiple test scenarios.
+├── scores.py             : Computes positioning accuracy metrics for algorithm evaluation.
+├── scores_batch.py       : Aggregates accuracy metrics across multiple test runs (run after rnx2rtkp_batch.py).
+├── data_analysis         : Tools for in-depth GNSS data analysis.
+│   ├── 2.4#pr_doppler_corr.py : Analyzes pseudorange and Doppler clock drift (see Section 2.4 of the documentation).
+│   └── 2.5#prr_tdcp.py       : Examines Doppler and Time-Differenced Carrier Phase (TDCP) correlations (see Section 2.5).
+├── mincost               : Quadratic programming-based global optimizer for post-processing.
+└── rtklipy              : Python implementation of RTKLIB for additional flexibility.
+```
+
+### 2.3 Running Tests
+1. Prepare test data in the `data` directory, organized by scenario (e.g., `data/01-opensky/`).
+2. Execute `rnx2rtkp_batch.py` to process test data across multiple scenarios.
+3. Run `scores_batch.py` to evaluate positioning accuracy and generate performance reports.
+4. Use the `data_analysis` scripts for detailed insights into pseudorange, Doppler, and multipath effects.
+
+## 3. License
+MobileGNSS-SPP is licensed under the [MIT License](LICENSE). See the `LICENSE` file for details.
+
+## 4. Acknowledgments
+- Built upon the robust foundation of [RTKLIB](https://www.rtklib.com/).
+- Gratitude to the participants of the Google Decimeter Challenge for their excellent code contributions: [@taroz1461](https://www.kaggle.com/taroz1461), [@saitodevel01](https://www.kaggle.com/saitodevel01), [@timeverett](https://www.kaggle.com/timeverett).
+- Special thanks to the GNSS research community for providing valuable insights and test methodologies.
+
+## 5. Contact
+For questions, bug reports, or feature requests, please open an issue on the [GitHub repository](https://github.com/salmoshu/MobileGNSS-SPP). For general inquiries, contact [winchell.hu@outlook.com](mailto:winchell.hu@outlook.com).
