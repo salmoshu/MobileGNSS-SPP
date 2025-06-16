@@ -11,7 +11,9 @@ from datetime import datetime
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 rtkpkg_dir = os.path.join(current_dir, './rtklibpy')
+mincost_dir = os.path.join(current_dir, './mincost')
 sys.path.append(rtkpkg_dir)
+sys.path.append(mincost_dir)
 cfgfile = os.path.join(rtkpkg_dir, 'config_spp.py')
 shutil.copyfile(cfgfile, '__ppk_config.py')
 
@@ -351,24 +353,88 @@ def utc2epochs(utc):
         ep_str_arr.append(ep_str)
     return np.array(ep_str_arr)
 
+def get_optimized_pos(timestamps, x_state, v_state):
+    n, dim_x = x_state.shape
+    from costopt import apply_costmin
+    from datetime import date
+    params_downtown = { 'sigma_u'  : 1.0,
+                        'sigma_p'  : 20.0,
+                        'sigma_a'  : 0.4 * 1e+5,
+                        'sigma_v'  : 1.0 * 1e+5,
+                        'sigma_d'  : 1.3 * 1e+5,
+                        'reject_p' : 20.0,  # [m]
+                        'reject_d' : 3.0,   # [m/s]
+                        'vmin'     : -0.05, # [m/s]
+                        'vmax'     : 50.0,  # [m/s]
+                        'Mi8_velocity_timeshift' : 0.0,
+                        'use_not_go_back_constraint' : False,
+                        'use_map'  : False,
+                        'threshold_distance_to_nearest_neighbor' : 8.0,
+                        'sigma_p_stage2' : 3.0,
+                        'num_stage2_iterations' : 1,
+                       }
+    # 根据x_state和v_state构建base_df，velocity_df
+    UTC_TO_GPS_OFFSET_MS = ((date(1980, 1, 6) - date(1970, 1, 1)).days * 24 * 3600 - 18) * 1000
+
+    x_pos = np.zeros([n, 3])
+
+    for i in range(n):
+        x_pos[i] = gn.ecef2pos(x_state[i])
+        x_pos[i][0] /= gn.rCST.D2R
+        x_pos[i][1] /= gn.rCST.D2R
+
+    base_df = pd.DataFrame({
+        'millisSinceGpsEpoch': timestamps - UTC_TO_GPS_OFFSET_MS,
+        'Time': (timestamps - timestamps[0]) / 1000.0,
+        'latDeg': x_pos[:, 0],
+        'lngDeg': x_pos[:, 1],
+        'altitudeMeters': x_pos[:, 2]
+    })
+
+    # Assume x_llh_mean is defined somewhere in the code, which is used as the reference point for ENU conversion
+    # For example, x_llh_mean can be calculated from x_state
+    x_llh = np.array(pm.ecef2geodetic(x_state[:, 0], x_state[:, 1], x_state[:, 2])).T
+    x_llh_mean = np.nanmean(x_llh, axis=0)
+
+    v_pos = np.zeros([n, 3])
+    for i in range(n):
+        v_enu = pm.ecef2enuv(v_state[i][0], v_state[i][1], v_state[i][2], x_llh_mean[0], x_llh_mean[1])
+        v_pos[i] = v_enu
+
+    velocity_df = pd.DataFrame({
+       'millisSinceGpsEpoch': timestamps - UTC_TO_GPS_OFFSET_MS,
+        'Time': (timestamps - timestamps[0]) / 1000.0,
+        'v_east': v_pos[:, 0],
+        'v_north': v_pos[:, 1],
+        'v_up': v_pos[:, 2]
+    })
+    ppdf = apply_costmin(base_df, velocity_df, None, params_downtown, N_LOOP=1)
+
+    # 从ppdf中提取ecef坐标到x_state
+    for i in range(n):
+        x_state[i] = gn.pos2ecef((ppdf['latDeg'][i], ppdf['lngDeg'][i], ppdf['altitudeMeters'][i]), True)
+    
+    return x_state
+
 if __name__ == '__main__':
-    # path = r'../data/01-opensky/data01'
-    path = r'../data/02-street/data01'
-    # path = r'../data/03-downtown/data01'
-    # path = r'../data/04-elevated/data01'
+    path = r'../data/01-opensky/data01'
+    # path = r'../data/02-street/data02'
+    # path = r'../data/03-downtown/data02'
+    # path = r'../data/04-elevated/data02'
 
     obs_path = path + r'\rover.obs'
     nav_path = path + r'\rover.nav'
     scene, group = path.split('/')[-2:]
 
-    utc, x_wls, cov_x, v_wls, cov_v = get_res_from_pos(path + r'\rover.pos') # opitimized result
+    utc, x_ekf, cov_x, v_ekf, cov_v = get_res_from_pos(path + r'\rover.pos') # opitimized result
+    # x_ekf = get_optimized_pos(utc, x_ekf, v_ekf)
     bl_df = get_res_from_nmea(path + r'\baseline.nmea') # baseline result
     gt_df = get_res_from_nmea(path + r'\rtk.nmea')      # ground truth result
 
     # Ground truth and baseline
     aligned_gt_df = align_gt_with_utc(gt_df, utc) # 对齐时间戳
     aligned_bl_df = align_gt_with_utc(bl_df, utc) # 对齐时间戳
-    llh_ekf = np.array(pm.ecef2geodetic(x_wls[:, 0], x_wls[:, 1], x_wls[:, 2])).T
+    llh_ekf = np.array(pm.ecef2geodetic(x_ekf[:, 0], x_ekf[:, 1], x_ekf[:, 2])).T
     llh_gt = aligned_gt_df[['LatitudeDegrees', 'LongitudeDegrees']].to_numpy()
     llh_bl = aligned_bl_df[['LatitudeDegrees', 'LongitudeDegrees']].to_numpy()
 
@@ -382,17 +448,16 @@ if __name__ == '__main__':
 
     print("\033[1;32m" + f"{scene}, {group} [nepoch = {len(utc)}]: (CEP50+CEP95)/2, CEP50, CEP95, CEP100" + "\033[0m")
     print(f'Score Baseline   {score_bl:.2f} ({scores_bl[0]:.2f} {scores_bl[1]:.2f} {scores_bl[2]:.2f}) [m]')
-    print(f'Score EKF       {score_ekf:.2f} ({scores_ekf[0]:.2f} {scores_ekf[1]:.2f} {scores_ekf[2]:.2f}) [m]')
+    print(f'Score MobileGNSS {score_ekf:.2f} ({scores_ekf[0]:.2f} {scores_ekf[1]:.2f} {scores_ekf[2]:.2f}) [m]')
 
     epochs_strs = utc2epochs(utc)
-    # epochs_strs = range(len(utc))
 
     # Plot distance error
     plt.figure()
     plt.title('Distance error')
     plt.ylabel('Distance error [m]')
     plt.plot(epochs_strs, vd_bl, label=f'Baseline, Score: {score_bl:.2f} ({scores_bl[0]:.2f},{scores_bl[1]:.2f}) m')
-    plt.plot(epochs_strs, vd_ekf, label=f'EKF, Score: {score_ekf:.2f} ({scores_ekf[0]:.2f},{scores_ekf[1]:.2f}) m')
+    plt.plot(epochs_strs, vd_ekf, label=f'MobileGNSS, Score: {score_ekf:.2f} ({scores_ekf[0]:.2f},{scores_ekf[1]:.2f}) m')
     plt.legend()
     plt.xlabel('Time [hh:mm:ss]')
     plt.xticks(rotation=90, fontsize=6)
@@ -403,9 +468,10 @@ if __name__ == '__main__':
     plt.ylim([0, 20])
 
     # Compute velocity error
-    speed_wls = np.linalg.norm(v_wls[:, :3], axis=1)
+    speed_wls = np.linalg.norm(v_ekf[:, :3], axis=1)
     speed_gt = aligned_gt_df['SpeedMps'].to_numpy()
     speed_rmse = np.sqrt(np.sum((speed_wls-speed_gt)**2)/len(speed_gt))
+    print(f'Speed RMSE:      {speed_rmse:.2f} m/s')
 
     # Plot velocity error
     plt.figure()

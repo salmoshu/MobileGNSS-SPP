@@ -358,7 +358,7 @@ static double DemianResOffset(const double* A, int n, double* ave_clk, double* s
 }
 
 /* receiver clock offset inner system */
-static void CheckClkJump(const int n, const double* H, double* x, double* v)
+static void AdjustClkJump(const int n, const double* H, double* x, double* v)
 {
     int i=0, idx_G=0, idx_E=0, idx_C=0, idx_I=0, idx_J=0;
     double offsetG=0.0, offsetE=0.0, offsetC=0.0, offsetI=0.0, offsetJ=0.0;
@@ -592,10 +592,12 @@ static double RobustWeightLsq(double resid, double sig, int kernel, int mode)
             }
             double z = resid / sig;
 
+            if ((mode==ROBUST_POS&&resid>=100) || (mode==ROBUST_VEL&&resid>=20)) {
+                return 0.0001 / resid;
+            }
+
             if (z < k) {
                 return 1.0 / sig;
-            } else if ((mode==ROBUST_POS&&resid>=100) || (mode==ROBUST_VEL&&resid>=20)) {
-                return 0.0001 / sig;
             } else {
                 return k / resid;
             }
@@ -605,28 +607,24 @@ static double RobustWeightLsq(double resid, double sig, int kernel, int mode)
             double k2 = 4.0;
             if (mode == ROBUST_POS || mode == ROBUST_NONE) {
                 k1 = 1.5;
-                k2 = 4.0;
+                k2 = 50.0;
             } else {
-                // case1: same as huber
                 k1 = 5.0;
-                k2 = 5.0;
-
-                // case2
-                // k1 = 1.3;
-                // k2 = 10.0;
+                k2 = 50.0;
             }
             double z = resid / sig;
 
+            if ((mode == ROBUST_POS && resid >= 100) || (mode == ROBUST_VEL && resid >= 20)) {
+                return 0.0001 / resid; /* 异常观测，极小权重 */
+            }
+
             if (z < k1) {
-                return 1.0 / sig; /* 正常观测，满权重 */
+                return 1.0 / sig;
             } else if (z < k2) {
                 /* 过渡区间，权重线性下降 */
-                return (k2 - z) / (k2 - k1) / sig;
-            }
-            else if ((mode == ROBUST_POS && resid >= 100) || (mode == ROBUST_VEL && resid >= 20)) {
-                return 0.0001 / sig; /* 异常观测，极小权重 */
+                return k1 / z * (k2 - z) / (k2 - k1) / sig;
             } else {
-                return k1 / resid; /* 异常区间，权重随残差反比下降 */
+                return 0.0001 / resid;
             }
         }
         default: { /* equal */
@@ -647,7 +645,7 @@ static double RobustWeight(double resid, double sig, int kernel, int mode)
 
             if (z < k) {
                 return 1.0 / sig;
-            } else if ((mode==ROBUST_POS&&resid>=100) || (mode==ROBUST_VEL&&resid>=2)) {
+            } else if ((mode==ROBUST_POS&&resid>=30) || (mode==ROBUST_VEL&&resid>=2)) {
                 return 0.0001 / sig;
             } else {
                 return k / resid;
@@ -685,7 +683,6 @@ static int RobustLsq(const double *H, const double *v, int nx, int nv, double *d
             resid = fabs(v[i] - dot(H + i * nx, dx, nx));
             if (mode == ROBUST_VEL) {
                 weight = RobustWeightLsq(resid, sig, ROBUST_HUBER, ROBUST_VEL);
-                // if (iter == 0) weight = 1.0 / sig;
             } else {
                 weight = RobustWeightLsq(resid, sig, ROBUST_HUBER, ROBUST_POS);
             }
@@ -788,7 +785,7 @@ static int estpos(const obsd_t *obs, int n, const double *rs, const double *dts,
         /* pseudorange residuals (m) */
         nv=rescode(i,obs,n,rs,dts,vare,svh,nav,x,opt,ssat,v,H,var,azel,vsat,resp,
                    &ns);
-        // if (i == 0) CheckClkJump(nv, H, x, v); /* median inner system as receiver clock */
+        // if (i == 0) AdjustClkJump(nv, H, x, v); /* median inner system as receiver clock */
         if (nv<NX) {
             sprintf(msg,"lack of valid sats ns=%d",nv);
             break;
@@ -997,6 +994,15 @@ static void estvel(const obsd_t *obs, int n, const double *rs, const double *dts
         if ((nv=resdop(obs,n,rs,dts,nav,sol->rr,x,azel,vsat,ssat,opt,err,v,H,var))<4) {
             break;
         }
+
+        /* remove clock jump offset */
+        // if (i == 0) {
+        //     double med = DemianResOffset(v, nv, NULL, NULL);
+        //     for (j=0; j<nv; j++) {
+        //         v[j] -= med;
+        //     }
+        //     x[3] += med;
+        // }
 
         // for (j=0;j<nv;j++) {
         //     sig=sqrt(var[j]);
@@ -1481,9 +1487,10 @@ static int EstposFilter(const obsd_t *obs, int n, const double *rs, const double
             }
         }
 
-        for (j = 0; j < nc; j++) {
-            // v[j] -= 2.5 * sqrt(var[j]);
-        }
+        // // 在抗差前进行残差零均值的调节
+        // for (j = 0; j < nc; j++) {
+        //     v[j] -= 2.5 * sqrt(var[j]);
+        // }
 
         RobustFilter(H_new, v, NX_F-3, nc, nd, NULL, var);
 
