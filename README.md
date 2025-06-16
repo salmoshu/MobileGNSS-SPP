@@ -9,10 +9,8 @@
 MobileGNSS-SPP is an advanced, open-source Single Point Positioning (SPP) system built upon the foundation of [RTKLIB](https://www.rtklib.com/), tailored specifically for optimizing GNSS performance on smartphone chipsets. While initially developed for a specific GNSS chipset, the optimization techniques and engineering approaches are designed with generality and adaptability in mind, making them applicable to a wide range of GNSS hardware. The project prioritizes practical engineering solutions and algorithmic robustness across diverse real-world scenarios, serving as a comprehensive roadmap for transitioning from open-source code to production-ready GNSS solutions.
 
 ## Key Features
-- **Smartphone-Optimized GNSS Processing**: Fine-tuned algorithms to maximize positioning accuracy on resource-constrained mobile devices.
+- **Smartphone-Optimized GNSS Processing**: Optimize the algorithm for mobile devices with low-quality data to improve positioning accuracy.
 - **Robustness Across Scenarios**: Extensively tested in diverse environments, from open-sky highways to urban canyons with heavy multipath interference.
-- **Engineering-Focused Design**: Emphasizes practical implementation, scalability, and reliability over purely theoretical advancements.
-- **Modular and Extensible**: Built with CMake for cross-platform compatibility and easy integration into existing GNSS workflows.
 - **Comprehensive Testing Framework**: Includes Python-based tools for batch processing, accuracy evaluation, and in-depth data analysis.
 
 ## Algorithmic Optimizations
