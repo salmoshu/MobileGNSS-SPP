@@ -4,7 +4,7 @@
 
 [[中]](./README_CN.md) &ensp; [[EN]](./README.md)
 
-![MobileGNSS-SPP Framework](https://raw.githubusercontent.com/salmoshu/Winchell-ImgBed/main/img/MobileGNSS-SPP%20Framework-20250616-150022.png)
+![MobileGNSS-SPP框架](https://raw.githubusercontent.com/salmoshu/Winchell-ImgBed/main/img/20250616-204621.png)
 
 MobileGNSS-SPP is an advanced, open-source Single Point Positioning (SPP) system built upon the foundation of [RTKLIB](https://www.rtklib.com/), tailored specifically for optimizing GNSS performance on smartphone chipsets. While initially developed for a specific GNSS chipset, the optimization techniques and engineering approaches are designed with generality and adaptability in mind, making them applicable to a wide range of GNSS hardware. The project prioritizes practical engineering solutions and algorithmic robustness across diverse real-world scenarios, serving as a comprehensive roadmap for transitioning from open-source code to production-ready GNSS solutions.
 
